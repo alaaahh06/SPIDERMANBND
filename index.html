@@ -5,18 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spider-Man: Brand New Day</title>
     <style>
-        body {
+        html, body {
             margin: 0;
             padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            overscroll-behavior: none; /* Prevents pull-to-refresh and bounce */
             background-color: #1a1a2e;
             color: white;
             font-family: 'Courier New', Courier, monospace;
+        }
+
+        body {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
-            overflow: hidden;
         }
 
         #game-container {
@@ -121,21 +126,30 @@
         }
         
         #mobile-controls {
-            display: flex;
-            position: absolute;
-            bottom: 20px;
-            width: 100%;
-            box-sizing: border-box;
-            padding: 0 30px;
-            justify-content: space-between;
-            z-index: 20;
+            display: block;
             pointer-events: none;
         }
         
-        .d-pad, .action-buttons {
+        .d-pad {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
             display: flex;
             gap: 15px;
             pointer-events: auto;
+            z-index: 100;
+            touch-action: none;
+        }
+
+        .action-buttons {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            gap: 15px;
+            pointer-events: auto;
+            z-index: 100;
+            touch-action: none;
         }
         
         .m-btn {
@@ -151,6 +165,7 @@
             justify-content: center;
             user-select: none;
             cursor: pointer;
+            touch-action: none;
         }
 
         .m-btn:active {
@@ -202,9 +217,13 @@
             canvas {
                 object-fit: contain; /* Keeps pixel aspect ratio correct without stretching */
             }
-            #mobile-controls {
+            .d-pad {
                 bottom: 15px;
-                padding: 0 15px;
+                left: 15px;
+            }
+            .action-buttons {
+                bottom: 15px;
+                right: 15px;
             }
             .m-btn {
                 width: 50px;
