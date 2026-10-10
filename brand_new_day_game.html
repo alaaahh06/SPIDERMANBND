@@ -393,14 +393,28 @@
                 this.speed = speed;
                 this.active = true;
                 this.pixelScale = 4;
+                this.scared = false;
             }
 
             update() {
-                // Always move towards player (simple AI)
-                if (player.x < this.x) {
-                    this.x -= this.speed;
+                if (this.scared) {
+                    // Run away from screen center when scared
+                    if (this.x > canvas.width / 2) {
+                        this.x += Math.abs(this.speed) * 1.5;
+                    } else {
+                        this.x -= Math.abs(this.speed) * 1.5;
+                    }
+                    // Deactivate if far off screen
+                    if (this.x < -100 || this.x > canvas.width + 100) {
+                        this.active = false;
+                    }
                 } else {
-                    this.x += this.speed;
+                    // Always move towards player (simple AI)
+                    if (player.x < this.x) {
+                        this.x -= this.speed;
+                    } else {
+                        this.x += this.speed;
+                    }
                 }
             }
 
@@ -409,26 +423,38 @@
                 const px = this.x;
                 const py = this.y;
 
-                // Mister Negative Thugs: High contrast black and white
-                ctx.fillStyle = '#ffffff'; // White suit
-                ctx.fillRect(px, py, this.width, this.height);
-
-                ctx.fillStyle = '#000000'; // Black tie/shirt and face
-                // Face
-                ctx.fillRect(px + 2*s, py, 4*s, 2*s);
-                // Suit details (Tie)
-                ctx.fillRect(px + 3.5*s, py + 2*s, 1*s, 4*s);
-                // Legs
-                ctx.fillRect(px + 1*s, py + 6*s, 2*s, 2*s);
-                ctx.fillRect(px + 5*s, py + 6*s, 2*s, 2*s);
-                
-                // Negative Eyes (white on black face)
-                ctx.fillStyle = '#ffffff';
-                let facingRight = player.x > this.x;
-                if (facingRight) {
-                    ctx.fillRect(px + 4*s, py + 0.5*s, 1*s, 1*s);
+                if (this.scared) {
+                    // Scared yellow state
+                    ctx.fillStyle = '#eab308'; // Yellow
+                    ctx.fillRect(px, py, this.width, this.height);
+                    
+                    // Scared face (black)
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(px + 2*s, py + 1*s, 1*s, 1.5*s); // left eye wide
+                    ctx.fillRect(px + 5*s, py + 1*s, 1*s, 1.5*s); // right eye wide
+                    ctx.fillRect(px + 3*s, py + 4*s, 2*s, 2*s); // open mouth
                 } else {
-                    ctx.fillRect(px + 3*s, py + 0.5*s, 1*s, 1*s);
+                    // Mister Negative Thugs: High contrast black and white
+                    ctx.fillStyle = '#ffffff'; // White suit
+                    ctx.fillRect(px, py, this.width, this.height);
+
+                    ctx.fillStyle = '#000000'; // Black tie/shirt and face
+                    // Face
+                    ctx.fillRect(px + 2*s, py, 4*s, 2*s);
+                    // Suit details (Tie)
+                    ctx.fillRect(px + 3.5*s, py + 2*s, 1*s, 4*s);
+                    // Legs
+                    ctx.fillRect(px + 1*s, py + 6*s, 2*s, 2*s);
+                    ctx.fillRect(px + 5*s, py + 6*s, 2*s, 2*s);
+                    
+                    // Negative Eyes (white on black face)
+                    ctx.fillStyle = '#ffffff';
+                    let facingRight = player.x > this.x;
+                    if (facingRight) {
+                        ctx.fillRect(px + 4*s, py + 0.5*s, 1*s, 1*s);
+                    } else {
+                        ctx.fillRect(px + 3*s, py + 0.5*s, 1*s, 1*s);
+                    }
                 }
             }
         }
@@ -554,17 +580,29 @@
             webs.forEach(web => web.update());
             webs = webs.filter(web => web.active);
 
+            // Check if Hulk is currently on screen
+            let hulkPresent = hulks.length > 0;
+
+            if (hulkPresent) {
+                // Scare all current enemies
+                enemies.forEach(enemy => enemy.scared = true);
+            }
+
             // Spawn Enemies
             enemySpawnTimer++;
             if (enemySpawnTimer > Math.max(40, 120 - score * 2)) { // Speeds up as score increases
                 let spawnX = Math.random() > 0.5 ? canvas.width + 30 : -30;
                 let speed = 1.5 + Math.random() + (score * 0.05); // Progressively faster
                 
-                // 15% chance to spawn a Hulk Boss once you have a bit of a score
-                if (score > 50 && Math.random() < 0.15) {
-                    hulks.push(new Hulk(spawnX, speed));
+                if (hulkPresent) {
+                    // Do nothing, pause spawning while Hulk is alive
                 } else {
-                    enemies.push(new Enemy(spawnX, speed));
+                    // 15% chance to spawn a Hulk Boss once you have a bit of a score
+                    if (score > 50 && Math.random() < 0.15) {
+                        hulks.push(new Hulk(spawnX, speed));
+                    } else {
+                        enemies.push(new Enemy(spawnX, speed));
+                    }
                 }
                 enemySpawnTimer = 0;
             }
