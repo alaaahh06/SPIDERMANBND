@@ -38,7 +38,7 @@ canvas{display:block}
 </style></head><body>
 <div id="hud"><div id="hb"><div id="hf"></div></div><div id="cb" class="o"></div></div>
 <button id="lc">LOAD CHARACTER</button><input id="lf" type="file" accept=".glb,.gltf,.zip,.bin,.png,.jpg,.jpeg,.webp" multiple hidden><div id="xh"></div><div id="tip" class="o"></div><div id="cap"></div>
-<div id="ov" class="o"><h1 id="t1">SPIDER-MAN</h1><p id="t2">Hold LEFT CLICK to swing, release to launch</p><p id="t4">WASD move &middot; walk into a wall to climb &middot; SPACE jump &middot; SHIFT sprint &middot; F punch &middot; E web-shot</p><p id="t3" style="color:#ffe14d;font-size:34px">Click to swing into action (mouse is captured, Esc frees it)</p></div>
+<div id="ov" class="o"><h1 id="t1">SPIDER-MAN</h1><p id="t2">Hold LEFT CLICK to swing, release to launch</p><p id="t4">WASD move &middot; walk into a wall to climb &middot; T eat at food stalls &middot; SPACE jump &middot; SHIFT sprint &middot; F punch &middot; E web-shot</p><p id="t3" style="color:#ffe14d;font-size:34px">Click to swing into action (mouse is captured, Esc frees it)</p></div>
 <div id="tc"><div id="js"><div id="jk"></div></div><div class="tb" id="bW">WEB</div><div class="tb" id="bJ">JUMP</div><div class="tb" id="bF">PUNCH</div><div class="tb" id="bE">SHOT</div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -535,11 +535,12 @@ function stepNPC(dt){const hk=E.find(e=>e.boss&&!e.dead);
   setP(NM.torso,i,0,.65*H,0,.26*H,.36*H,.14*H);setP(NM.head,i,0,.91*H,0,.08*H,.09*H,.08*H);
   for(const sd of[-1,1]){const j=2*i+(sd>0?1:0),b=a*sd;setP(NM.leg,j,sd*.07*H,.47*H-.235*H*Math.cos(b),-.235*H*Math.sin(b),.1*H,.47*H,.11*H,b);setP(NM.arm,j,sd*.17*H,.8*H-.17*H*Math.cos(-b),.17*H*Math.sin(b),.07*H,.34*H,.08*H,-b)}}
  for(const k in NM)NM[k].instanceMatrix.needsUpdate=true;if(NM.torso.instanceColor)for(const k in NM)NM[k].instanceColor.needsUpdate=true}
-function stepWorld(dt){sigT+=dt;stepTraffic(dt);stepNPC(dt);stepSplat(dt);drawRadar();charStep(dt);spStep()}
+function stepWorld(dt){sigT+=dt;stepTraffic(dt);stepNPC(dt);stepSplat(dt);eatUpdate(dt);drawRadar();charStep(dt);spStep()}
 /* ===== PART 3: street stalls (hot dogs, fruit, coffee, pretzels, ice cream) on the sidewalk against the wall, each with a vendor NPC and a hull so you can't walk through them ===== */
+const STALLS=[],FORCE_STALL=new Set(['0,1,1,0','0,0,0,1','1,0,-1,0']);   // forced: ~30-55 units from the spawn point
 {const TY=[{n:'HOT DOGS',c:'#d62828',u:'#d62828',g:['#555555','#c1440e','#f7d633']},{n:'FRESH FRUIT',c:'#2e8b3a',u:'#2e8b3a',g:['#d62828','#f28c28','#6aa84f']},{n:'COFFEE',c:'#6b4226',u:'#eeeeee',g:['#eeeeee','#6b4226','#d9b38c']},{n:'PRETZELS',c:'#c98a2b',u:'#2b6bc9',g:['#c98a2b','#e0a840','#f0f0f0']},{n:'ICE CREAM',c:'#ff7ab8',u:'#ff7ab8',g:['#ffffff','#ffb6d9','#9be7ff']}];
  const bxs=[],cys=[],whs=[],cns=[],sg=TY.map(()=>[]),SC2=new THREE.CylinderGeometry(.06,.06,1,6),CN=new THREE.ConeGeometry(1,1,16);
- for(let i=-7;i<=7;i++)for(let j=-7;j<=7;j++)for(const[nx,nz]of[[0,1],[0,-1],[1,0],[-1,0]]){if(R()>.1||NPCS.length>=NT-1)continue;
+ for(let i=-7;i<=7;i++)for(let j=-7;j<=7;j++)for(const[nx,nz]of[[0,1],[0,-1],[1,0],[-1,0]]){if((R()>.1&&!FORCE_STALL.has(i+','+j+','+nx+','+nz))||NPCS.length>=NT-1)continue;
   const ty=R()*5|0,T=TY[ty],tx=nz?1:0,tz=nx?1:0,q=28,sx=i*CELL+nx*q+tx*-12.5,sz=j*CELL+nz*q+tz*-12.5,ry=Math.atan2(nx,nz),cs=Math.cos(ry),sn=Math.sin(ry);
   const W=(o,a)=>a.push(Object.assign({x:sx+o[0]*cs+o[2]*sn,y:o[1],z:sz-o[0]*sn+o[2]*cs,ry},o[3]));
   W([0,.95,0,{sx:3,sy:1.1,sz:1.6,c:T.c}],bxs);W([0,1.55,.05,{sx:3.1,sy:.12,sz:1.7,c:'#d9d9d9'}],bxs);
@@ -548,10 +549,46 @@ function stepWorld(dt){sigT+=dt;stepTraffic(dt);stepNPC(dt);stepSplat(dt);drawRa
   for(const a of[-1,1])W([a*1.55,.42,0,{sx:.5,sy:.9,sz:.9,c:'#222222'}],whs);
   W([0,.95,.82,{sx:2.6,sy:.7,sz:1}],sg[ty]);
   const hx=nz?1.6:1,hz=nx?1.6:1;B.push({x0:sx-hx,x1:sx+hx,z0:sz-hz,z1:sz+hz,top:1.7,m:conc});
-  mkNpc({x:sx-nx*1.5,z:sz-nz*1.5,ry,shirt:'#f0f0f0',hs:1})}
+  STALLS.push({x:sx,z:sz,ty,cd:0});mkNpc({x:sx-nx*1.5,z:sz-nz*1.5,ry,shirt:'#f0f0f0',hs:1})}
  inst(CBX,new THREE.MeshStandardMaterial({color:0xffffff,roughness:.7}),bxs);inst(SC2,new THREE.MeshStandardMaterial({color:0xffffff,roughness:.5}),cys);inst(CWG,new THREE.MeshStandardMaterial({color:0xffffff,roughness:.9}),whs);inst(CN,new THREE.MeshStandardMaterial({color:0xffffff,roughness:.8,side:THREE.DoubleSide}),cns);
  TY.forEach((T,k)=>{if(!sg[k].length)return;const c=document.createElement('canvas');c.width=256;c.height=100;const g=c.getContext('2d');g.fillStyle=T.c;g.fillRect(0,0,256,100);g.strokeStyle='#fff';g.lineWidth=6;g.strokeRect(4,4,248,92);g.fillStyle='#fff';g.font='bold 40px Impact,Arial Black,sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(T.n,128,52);
   const m=inst(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),side:THREE.DoubleSide}),sg[k])})}
+/* ===== EAT: heal at the street food stalls (hot dogs, fruit, coffee, pretzels, ice cream). Walk up to one, press T / tap the EAT button. Each stall restocks after EAT_CD seconds. ===== */
+const FOODS=[['HOT DOG',30],['FRUIT',25],['COFFEE',15],['PRETZEL',20],['ICE CREAM',20]],EAT_R=10,EAT_CD=25;
+{const st=document.createElement('style');st.textContent=
+ '#eat{position:fixed;left:50%;transform:translateX(-50%);bottom:calc('+(isTouch?80:56)+'px + env(safe-area-inset-bottom,0px));z-index:6;display:none;flex-direction:column;align-items:center;min-width:150px;padding:6px 18px;background:#ffd23f;color:#111;border:4px solid #000;border-radius:14px;box-shadow:4px 4px 0 #000;font-family:Bangers,Impact,sans-serif;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}'+
+ '#eat b{font-size:28px;font-weight:400;line-height:1}#eat span{font-size:14px;letter-spacing:.5px}#eat.show{display:flex}#eat.off{background:#8a8a8a;color:#222}'+
+ '#eatT{position:fixed;left:292px;top:calc(14px + env(safe-area-inset-top,0px));z-index:6;font:34px Bangers,Impact,sans-serif;color:#4cff7a;-webkit-text-stroke:2px #000;paint-order:stroke fill;opacity:0;pointer-events:none}#eatT.go{animation:eg 1.1s ease-out}'+
+ '@keyframes eg{0%{opacity:0;transform:translateY(8px) scale(.6)}15%{opacity:1;transform:scale(1.2)}70%{opacity:1}100%{opacity:0;transform:translateY(-12px)}}'+
+ '#hb.heal{animation:hh .7s}@keyframes hh{0%{box-shadow:0 0 0 0 rgba(76,255,122,.9)}100%{box-shadow:0 0 0 18px rgba(76,255,122,0)}}';document.head.appendChild(st)}
+const eatB=document.createElement('div');eatB.id='eat';eatB.innerHTML='<b>EAT</b><span></span>';document.body.appendChild(eatB);
+const eatS=eatB.querySelector('span'),eatT=document.createElement('div');eatT.id='eatT';document.body.appendChild(eatT);
+const emc=document.createElement('canvas');emc.width=emc.height=128;
+{const g=emc.getContext('2d');g.fillStyle='#fff';g.beginPath();g.arc(64,64,56,0,6.283);g.fill();g.fillStyle='#2ecc71';g.beginPath();g.arc(64,64,48,0,6.283);g.fill();g.fillStyle='#fff';g.fillRect(54,28,20,72);g.fillRect(28,54,72,20)}
+const EATM=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(emc),transparent:true,depthWrite:false,fog:false}));EATM.visible=false;scene.add(EATM);   // floating green "+" over the nearest stall
+let eatNear=null;
+function eatUpdate(dt){
+ if(state!=='play'||!S){eatB.classList.remove('show');EATM.visible=false;eatNear=null;return}
+ for(const s of STALLS)if(s.cd>0)s.cd-=dt;
+ if(S.eatT>0)S.eatT-=dt;
+ let best=null,bd=1e9;for(const s of STALLS){const d=Math.hypot(s.x-S.pos.x,s.z-S.pos.z);if(d<bd){bd=d;best=s}}
+ eatNear=best&&bd<=EAT_R&&S.pos.y<5?best:null;
+ if(best&&bd<70){EATM.visible=true;EATM.position.set(best.x,7+Math.sin(time*3)*.5,best.z);EATM.material.opacity=best.cd>0||S.hp>=100?.35:1;EATM.scale.setScalar(clamp(bd/25,2.6,5))}else EATM.visible=false;
+ if(eatNear){const f=FOODS[eatNear.ty],full=S.hp>=100,cd=eatNear.cd>0;
+  eatS.textContent=(full?'HP FULL':cd?'RESTOCKING '+Math.ceil(eatNear.cd)+'s':f[0]+' +'+f[1]+' HP')+(isTouch?'':'   [T]');
+  eatB.classList.add('show');eatB.classList.toggle('off',full||cd)}
+ else eatB.classList.remove('show')}
+function tryEat(){
+ if(state!=='play'||!S||!eatNear)return;const s=eatNear;if(S.hp>=100||s.cd>0)return;const f=FOODS[s.ty];
+ S.hp=Math.min(100,S.hp+f[1]);s.cd=EAT_CD;S.eatT=.8;
+ for(let i=0;i<14;i++)frag(S.pos.x+(R()-.5)*2,S.pos.y+3.2,S.pos.z+(R()-.5)*2,(R()-.5)*4,5+R()*5,(R()-.5)*4,.35+R()*.25,pick(['#4cff7a','#9dffb0','#ffe14d','#ffffff']),1.3,4,.5);
+ eatT.textContent='+'+f[1]+' HP';eatT.classList.remove('go');void eatT.offsetWidth;eatT.classList.add('go');
+ const hb=$('hb');hb.classList.remove('heal');void hb.offsetWidth;hb.classList.add('heal')}
+eatB.addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();tryEat()},{passive:false});
+eatB.addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation()},{passive:false});
+eatB.addEventListener('click',tryEat);
+addEventListener('keydown',e=>{if(e.code==='KeyT'&&!e.repeat)tryEat()});
+/* ===== end EAT ===== */
 /* ---- web retexture: silk strand (twisted fibre texture + glow), spider-web splat decals on hit/attach, cocoon wrap on webbed enemies ---- */
 function webTexSplat(){const c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d'),cx=128,cy=128,sp=10;
  g.shadowColor='rgba(150,190,255,.9)';g.shadowBlur=6;g.strokeStyle='rgba(255,255,255,.95)';g.lineCap='round';
@@ -589,6 +626,7 @@ function drawRadar(){document.body.classList.toggle('pl',!!S&&state==='play');if
  rg.setTransform(1,0,0,1,0,0);rg.fillStyle='#0f1d2a';rg.fillRect(0,0,W,W);
  rg.save();rg.translate(c,c);rg.rotate(th);rg.scale(k,k);rg.translate(-S.pos.x,-S.pos.z);rg.drawImage(MAPC,-HALF,-HALF,2*HALF,2*HALF);
  for(const e of E){if(e.dead||e.boss)continue;if(Math.hypot(e.pos.x-S.pos.x,e.pos.z-S.pos.z)<RV){rg.fillStyle='#ff4040';rg.beginPath();rg.arc(e.pos.x,e.pos.z,3.4,0,6.283);rg.fill()}}
+ for(const s of STALLS)if(Math.hypot(s.x-S.pos.x,s.z-S.pos.z)<RV){rg.fillStyle=s.cd>0?'#7a6a4a':'#ffd23f';rg.strokeStyle='#fff';rg.lineWidth=1;rg.beginPath();rg.arc(s.x,s.z,3.6,0,6.283);rg.fill();rg.stroke()}
  const hk=E.find(e=>e.boss&&!e.dead);if(hk){const d=Math.hypot(hk.pos.x-S.pos.x,hk.pos.z-S.pos.z);if(d<RV*.93){const p=1+.25*Math.sin(time*6);rg.fillStyle='#38ff3a';rg.strokeStyle='#fff';rg.lineWidth=1.4;rg.beginPath();rg.arc(hk.pos.x,hk.pos.z,7*p,0,6.283);rg.fill();rg.stroke()}}
  rg.restore();
  if(hk){const dx=hk.pos.x-S.pos.x,dz=hk.pos.z-S.pos.z,d=Math.hypot(dx,dz);if(d>=RV*.93){const rx=dx*ct-dz*st,rz=dx*st+dz*ct,a=Math.atan2(rz,rx),r=c-12*rdp;rg.save();rg.translate(c+Math.cos(a)*r,c+Math.sin(a)*r);rg.rotate(a);rg.fillStyle='#38ff3a';rg.strokeStyle='#fff';rg.lineWidth=1.5*rdp;rg.beginPath();rg.moveTo(8*rdp,0);rg.lineTo(-6*rdp,6*rdp);rg.lineTo(-6*rdp,-6*rdp);rg.closePath();rg.fill();rg.stroke();rg.restore()}}
@@ -823,7 +861,7 @@ function cap(t){return;const c=$('cap');c.textContent=t;c.style.animation='none'
 let state='title',score=0,best=0,shake=0,time=0,overAt=0,spawnT=1,yaw=0,pitch=.1,mdown=false,locked=false,startT=0,roll=0,pAcc=0,tick=false,firstWeb=true;
 let S,E=[];const K={};
 function reset(){
- for(const e of E)scene.remove(e.g);E=[];
+ for(const e of E)scene.remove(e.g);E=[];for(const st of STALLS)st.cd=0;
  S={pos:V(CELL/2,0,CELL/2),vel:V(0,0,0),r:.55,h:2.9,arm:1,shoot:1,dive:0,ground:true,anc:null,L:0,sw:0,hp:100,inv:0,atkT:0,atk:0,webCd:0,combo:0,comboT:0,fy:0,run:0,land:0,landAmt:0,wall:null,wallCd:0,hw:null,cr:0};
  score=0;spawnT=.8;startT=time;hulkT=0;yaw=0;pitch=.1;firstWeb=true;
 }
@@ -1013,6 +1051,7 @@ function poseP(dt){
   if(S.land>0){const k=clamp(S.land/.4,0,1)*S.landAmt;T.hl=-k;T.hr=-.7*k;T.kl=1.7*k;T.kr=1.5*k;T.th=.55*k;T.sl=-.7*k;T.sr=-.3*k;T.el=T.er=-k;T.slz=-.5;T.srz=.5}}
  if(S.ground&&hs<1&&!S.wall&&!S.anc){const br=Math.sin(time*2.2);T.sl+=br*.04;T.sr-=br*.04;T.th+=br*.015;T.slz=-.16;T.srz=.16}
  if(beamT>0&&beamTo&&!S.anc&&!S.wall){const ar=armAim(beamTo,1,T.th||0);T.sr=ar.x;T.srz=ar.z;T.er=-.1;T.tw=(T.tw||0)+.3}
+ if(S.eatT>0&&S.ground&&!CB.n&&!S.wall&&!S.anc){const k=Math.sin(clamp(S.eatT/.8,0,1)*Math.PI);T.sr=lv(T.sr,-1.9,k);T.er=lv(T.er,-2.3,k);T.th=lv(T.th,.2,k)}
  actPose(T);
  const w=CB.n||dgT>0||slamRec>0?42:S.ground&&hs>2?30:(S.dive||S.shoot<.3)?24:15,ex=Math.exp(-w*dt);for(const k of PK){const d=c[k]-T[k],t=(cv[k]+w*d)*dt;c[k]=T[k]+(d+t)*ex;cv[k]=(cv[k]-w*t)*ex}gaitOv(c,dt,hs);
  a.sl.rotation.x=c.sl;a.sl.rotation.z=c.slz;a.sr.rotation.x=c.sr;a.sr.rotation.z=c.srz;a.el.rotation.x=c.el;a.er.rotation.x=c.er;
@@ -1046,7 +1085,7 @@ function frame(t){
  stepFx(dt);stepPJ(dt);stepWorld(dt);poseP(dt);camUpdate(dt);hulkHud();
  $('hf').style.width=S.hp+'%';
  $('cb').textContent=S.combo>1?S.combo+'x COMBO!':'';
- $('tip').textContent=state==='play'&&time-startT<16?'WASD move · walk into a wall to climb it · SPACE jump / leap off · HOLD CLICK swing · F punch combo (hold) · G uppercut · Q dodge · F in air = kick, F while falling = HERO SLAM · E web-shot (yanks enemies) · SHIFT sprint (zip to web while swinging) · C dive · find the HULK on the radar':'';
+ $('tip').textContent=state==='play'&&time-startT<16?'WASD move · walk into a wall to climb it · T eat at food stalls · SPACE jump / leap off · HOLD CLICK swing · F punch combo (hold) · G uppercut · Q dodge · F in air = kick, F while falling = HERO SLAM · E web-shot (yanks enemies) · SHIFT sprint (zip to web while swinging) · C dive · find the HULK on the radar':'';
  $('xh').style.display=state==='play'?'block':'none';
  pm.uniforms.time.value=time;warnI.visible=(time*1.2)%1<.6;
  followSun();ren.info.reset();ren.setRenderTarget(rt);ren.render(scene,cam);ren.setRenderTarget(null);ren.render(pscene,pcam);
