@@ -541,18 +541,115 @@ function mkNpc(o){const n=Object.assign({ya:0,ph:R()*6,hs:.9+R()*.2},o),i=NPCS.l
 for(let n=0;n<220;n++){const q=29.3+R()*.4;mkNpc({walk:1,cx:((R()*15|0)-7)*CELL,cz:((R()*15|0)-7)*CELL,q,s:R()*8*q,dir:R()<.5?1:-1,sp:1.5+R()*1.2})}
 const nr=new THREE.Object3D(),np2=new THREE.Object3D(),nm4=new THREE.Matrix4();
 function setP(m,slot,ox,oy,oz,sx,sy,sz,rx){np2.position.set(ox,oy,oz);np2.rotation.set(rx||0,0,0);np2.scale.set(sx,sy,sz);np2.updateMatrix();nm4.multiplyMatrices(nr.matrix,np2.matrix);m.setMatrixAt(slot,nm4)}
-function stepNPC(dt){const hk=E.find(e=>e.boss&&!e.dead);
- for(const n of NPCS){let mv=0,H=2.4*n.hs;
+function stepNPC(dt){bbStep(dt);const hk=E.find(e=>e.boss&&!e.dead);
+ for(const n of NPCS){let mv=0,H=2.4*n.hs;if(n.kid)mv=n.mv?1:0;
   if(n.walk){let sp=n.sp;if(hk&&Math.hypot(hk.pos.x-n.x,hk.pos.z-n.z)<45)sp*=2.6;n.s+=n.dir*sp*dt;n.ph+=sp*dt*2.8;mv=1;const L=2*n.q,s=((n.s%(4*L))+4*L)%(4*L),e=s/L|0,u=s%L-n.q;let x,z,hx,hz;
    if(e===0){x=u;z=-n.q;hx=1;hz=0}else if(e===1){x=n.q;z=u;hx=0;hz=1}else if(e===2){x=-u;z=n.q;hx=-1;hz=0}else{x=-n.q;z=-u;hx=0;hz=-1}
    n.x=n.cx+x;n.z=n.cz+z;const ty=Math.atan2(hx*n.dir,hz*n.dir);n.ya+=Math.atan2(Math.sin(ty-n.ya),Math.cos(ty-n.ya))*(1-Math.exp(-10*dt))}
-  else n.ya=n.ry;
+  else if(!n.kid)n.ya=n.ry;
   const a=mv?Math.sin(n.ph)*.65:Math.sin(time*1.6+n.ph)*.04,by=mv?Math.abs(Math.sin(n.ph))*.04*H:0;
-  nr.position.set(n.x,by,n.z);nr.rotation.y=n.ya;nr.updateMatrix();const i=n.i;
+  nr.position.set(n.kid?n.wx:n.x,by+(n.hop||0),n.kid?n.wz:n.z);nr.rotation.y=n.ya;nr.updateMatrix();const i=n.i;
   setP(NM.torso,i,0,.65*H,0,.26*H,.36*H,.14*H);setP(NM.head,i,0,.91*H,0,.08*H,.09*H,.08*H);
-  for(const sd of[-1,1]){const j=2*i+(sd>0?1:0),b=a*sd;setP(NM.leg,j,sd*.07*H,.47*H-.235*H*Math.cos(b),-.235*H*Math.sin(b),.1*H,.47*H,.11*H,b);setP(NM.arm,j,sd*.17*H,.8*H-.17*H*Math.cos(-b),.17*H*Math.sin(b),.07*H,.34*H,.08*H,-b)}}
+  for(const sd of[-1,1]){const j=2*i+(sd>0?1:0),b=a*sd,ov=sd>0?n.ar:n.al,ba=ov===undefined?b:ov;setP(NM.leg,j,sd*.07*H,.47*H-.235*H*Math.cos(b),-.235*H*Math.sin(b),.1*H,.47*H,.11*H,b);setP(NM.arm,j,sd*.17*H,.8*H-.17*H*Math.cos(-ba),.17*H*Math.sin(ba),.07*H,.34*H,.08*H,-ba)}}
  for(const k in NM)NM[k].instanceMatrix.needsUpdate=true;if(NM.torso.instanceColor)for(const k in NM)NM[k].instanceColor.needsUpdate=true}
 function stepWorld(dt){sigT+=dt;stepTraffic(dt);stepNPC(dt);stepSplat(dt);eatUpdate(dt);drawRadar();charStep(dt);spStep()}
+/* ===== BASKETBALL: courts built in empty city blocks, with kids (instanced NPCs) playing 4-v-4. They dribble, pass, shoot (makes and misses off the backboard), chase rebounds, and cheer/wave when Spider-Man comes near. Hoop poles + backboards are web-attachable. ===== */
+const bbCourts=[],BBG=20,BBR=.36;   // ball gravity (units/s^2) and ball radius
+function bbTex(w,h,fn,rep){const c=document.createElement('canvas');c.width=w;c.height=h;fn(c.getContext('2d'),w,h);const t=new THREE.CanvasTexture(c);if(rep){t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(rep[0],rep[1])}return t}
+const bbCourtTex=()=>bbTex(1024,540,(g,W,H)=>{const u=W/38,half=(sx)=>{g.save();if(sx<0){g.translate(W,0);g.scale(-1,1)}
+  g.fillStyle='#d9632a';g.fillRect(0,H/2-3.325*u,7.9*u,6.65*u);                                                   // the key (paint)
+  g.strokeStyle='#fff';g.lineWidth=3.2;g.strokeRect(0,H/2-3.325*u,7.9*u,6.65*u);
+  g.beginPath();g.arc(7.9*u,H/2,2.45*u,-Math.PI/2,Math.PI/2);g.stroke();g.setLineDash([9,9]);g.beginPath();g.arc(7.9*u,H/2,2.45*u,Math.PI/2,Math.PI*1.5);g.stroke();g.setLineDash([]);   // free-throw circle
+  const th=Math.asin(8.9/9.2);g.beginPath();g.arc(2.14*u,H/2,9.2*u,-th,th);g.stroke();                              // three-point arc + straight sections
+  g.beginPath();g.moveTo(0,H/2-8.9*u);g.lineTo(2.14*u+9.2*u*Math.cos(th),H/2-8.9*u);g.moveTo(0,H/2+8.9*u);g.lineTo(2.14*u+9.2*u*Math.cos(th),H/2+8.9*u);g.stroke();
+  g.fillStyle='#fff';g.beginPath();g.arc(2.14*u,H/2,.16*u,0,6.283);g.fill();g.restore()};
+ g.fillStyle='#2d6cb0';g.fillRect(0,0,W,H);for(let i=0;i<2600;i++){g.fillStyle=Math.random()<.5?'rgba(255,255,255,.04)':'rgba(0,0,0,.07)';g.fillRect(Math.random()*W,Math.random()*H,2,2)}
+ half(1);half(-1);g.strokeStyle='#fff';g.lineWidth=3.2;g.strokeRect(1.6,1.6,W-3.2,H-3.2);g.beginPath();g.moveTo(W/2,0);g.lineTo(W/2,H);g.stroke();g.beginPath();g.arc(W/2,H/2,2.45*u,0,6.283);g.stroke()});
+const bbAsphaltTex=()=>bbTex(256,256,(g,W,H)=>{g.fillStyle='#4a4d55';g.fillRect(0,0,W,H);for(let i=0;i<3500;i++){g.fillStyle=Math.random()<.5?'rgba(255,255,255,.07)':'rgba(0,0,0,.14)';g.fillRect(Math.random()*W,Math.random()*H,2,2)}},[6,3.6]);
+const bbFenceTex=()=>bbTex(64,64,(g,W,H)=>{g.strokeStyle='#aab0b8';g.lineWidth=2.4;for(let k=-64;k<128;k+=16){g.beginPath();g.moveTo(k,0);g.lineTo(k+64,64);g.stroke();g.beginPath();g.moveTo(k+64,0);g.lineTo(k,64);g.stroke()}},[1,1]);   // [1,1] = turn on RepeatWrapping (the fence UVs are scaled up)
+const bbBallTex=()=>bbTex(128,64,(g,W,H)=>{g.fillStyle='#e8762b';g.fillRect(0,0,W,H);g.strokeStyle='#2a1608';g.lineWidth=3;for(const x of[0,W/2,W]){g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke()}g.beginPath();g.moveTo(0,H/2);g.lineTo(W,H/2);g.stroke();for(const x of[W/4,W*.75]){g.beginPath();g.arc(x,H/2,H*.42,-1.2,1.2);g.stroke();g.beginPath();g.arc(x,H/2,H*.42,Math.PI-1.2,Math.PI+1.2);g.stroke()}});
+/* ---- court geometry (world position cx,cz; long axis along x; 38 x 20 playing area, hoops at x=+-16.9, rim height 4.3) ---- */
+function bbBuild(cx,cz){
+ const grp=new THREE.Group();grp.position.set(cx,0,cz);
+ const po={polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2};
+ const mk=(geo,mat,x,y,z,rx,ry)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);if(rx)m.rotation.x=rx;if(ry)m.rotation.y=ry;m.receiveShadow=true;grp.add(m);return m};
+ mk(new THREE.PlaneGeometry(46,28),new THREE.MeshStandardMaterial(Object.assign({map:BBASPH,roughness:.95},po)),0,.05,0,-Math.PI/2);
+ mk(new THREE.PlaneGeometry(38,20),new THREE.MeshStandardMaterial(Object.assign({map:BBCT,roughness:.7},po,{polygonOffsetFactor:-4,polygonOffsetUnits:-4})),0,.09,0,-Math.PI/2);
+ // chain-link fence (cut-out texture) with a gap in the south side, posts + top rails instanced
+ const fm=new THREE.MeshStandardMaterial({map:BBFENCE,alphaTest:.5,side:THREE.DoubleSide,roughness:.6,metalness:.4}),FHT=4.6;
+ const panel=(len,x,z,ry)=>{const g=new THREE.PlaneGeometry(len,FHT),uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*len/1.3,uv.getY(i)*FHT/1.3);const m=new THREE.Mesh(g,fm);m.position.set(x,FHT/2+.1,z);m.rotation.y=ry;grp.add(m)};
+ panel(45,0,-13.8,0);panel(18,-13.5,13.8,0);panel(18,13.5,13.8,0);panel(27.6,-22.5,0,Math.PI/2);panel(27.6,22.5,0,Math.PI/2);
+ const items=[],pm=new THREE.MeshStandardMaterial({color:0x5a6068,roughness:.5,metalness:.6});
+ for(const x of[-22.5,-15,-7.5,0,7.5,15,22.5])items.push([x,2.5,-13.8,.2,4.8,.2]);for(const x of[-22.5,-15,-4.5,4.5,15,22.5])items.push([x,2.5,13.8,.2,4.8,.2]);for(const z of[-6.9,0,6.9])items.push([-22.5,2.5,z,.2,4.8,.2],[22.5,2.5,z,.2,4.8,.2]);
+ items.push([0,4.75,-13.8,45,.14,.14],[-13.5,4.75,13.8,18,.14,.14],[13.5,4.75,13.8,18,.14,.14],[-22.5,4.75,0,.14,.14,27.6],[22.5,4.75,0,.14,.14,27.6]);
+ const fp=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),pm,items.length),d=new THREE.Object3D();items.forEach((q,i)=>{d.position.set(q[0],q[1],q[2]);d.scale.set(q[3],q[4],q[5]);d.updateMatrix();fp.setMatrixAt(i,d.matrix)});fp.frustumCulled=false;grp.add(fp);
+ // hoops: pole + arm + backboard are added to bm so webs can attach to them
+ const metal=new THREE.MeshStandardMaterial({color:0x3a3f46,roughness:.45,metalness:.7}),white=new THREE.MeshStandardMaterial({color:0xf2f2f2,roughness:.4}),rimM=new THREE.MeshStandardMaterial({color:0xff6a1a,roughness:.4,metalness:.3}),netM=new THREE.MeshStandardMaterial({color:0xeeeeee,roughness:.9,side:THREE.DoubleSide});
+ for(const dir of[-1,1]){
+  const pole=mk(new THREE.CylinderGeometry(.16,.2,5.2,10),metal,dir*21.2,2.6,0),arm=mk(new THREE.BoxGeometry(3.8,.22,.22),metal,dir*19.4,5,0),board=mk(new THREE.BoxGeometry(.12,1.45,2.5),white,dir*17.5,4.9,0);
+  mk(new THREE.PlaneGeometry(.9,.65),rimM,dir*17.43,4.55,0,0,-dir*Math.PI/2);mk(new THREE.TorusGeometry(.3,.035,6,18),rimM,dir*16.9,4.3,0,Math.PI/2);mk(new THREE.CylinderGeometry(.3,.17,.8,12,1,true),netM,dir*16.9,3.9,0);
+  bm.push(pole,arm,board)}
+ scene.add(grp);return grp}
+const BBASPH=bbAsphaltTex(),BBCT=bbCourtTex(),BBFENCE=bbFenceTex(),BBBALL=bbBallTex();
+/* ---- game logic (plain numbers; no rendering objects, so it is unit-testable) ---- */
+const bbWrap=a=>Math.atan2(Math.sin(a),Math.cos(a));
+function bbMove(k,tx,tz,sp,dt){const dx=tx-k.x,dz=tz-k.z,d=Math.hypot(dx,dz);if(d>.35){const s=Math.min(sp,d*3);k.vx=dx/d*s;k.vz=dz/d*s;k.mvs=s}else{k.vx=k.vz=0;k.mvs=0}
+ k.x=Math.max(-20.8,Math.min(20.8,k.x+k.vx*dt));k.z=Math.max(-12.6,Math.min(12.6,k.z+k.vz*dt))}   // can run onto the apron to fetch a stray ball   // k.x/k.z are court-local
+function bbHand(k,b){const H=2.4*k.hs,fx=Math.sin(k.ya),fz=Math.cos(k.ya),rx=Math.cos(k.ya),rz=-Math.sin(k.ya),a=b.ph,y=BBR+Math.abs(Math.cos(a))*(.5*H-BBR);
+ b.p.x=k.x+fx*.5*H+rx*.17*H;b.p.z=k.z+fz*.5*H+rz*.17*H;b.p.y=y;b.v.x=b.v.y=b.v.z=0;k.ar=.75+.45*Math.cos(a)}   // right arm pumps with the bounce
+function bbHoop(c,team){return team===0?16.9:-16.9}
+function bbPossess(c,k){const b=c.ball;b.mode='held';b.holder=k;b.t=0;b.pt=1.4+Math.random()*2.2;b.sp=6.5+Math.random()*3;b.sz=(Math.random()-.5)*9;k.st='dribble';b.chaser=null}
+function bbRelease(c,k,rnd){const b=c.ball,hx=bbHoop(c,k.team),H=2.4*k.hs,T=1.0,dist=Math.hypot(hx-k.x,k.z),make=rnd()<Math.max(.25,.7-dist*.025);
+ let tx=hx,tz=0,ty=4.3;if(!make){tx+=(rnd()-.5)*1.7;tz+=(rnd()-.5)*1.7;ty+=rnd()<.5?.5:-.15}
+ b.p.x=k.x+Math.sin(k.ya)*.3*H;b.p.z=k.z+Math.cos(k.ya)*.3*H;b.p.y=1.45*H;
+ b.v.x=(tx-b.p.x)/T;b.v.z=(tz-b.p.z)/T;b.v.y=(ty-b.p.y+.5*BBG*T*T)/T;b.mode='shot';b.holder=null;b.last=k.team;b.made=make;b.age=0;k.st='idle';k.hop=0}
+function bbBallPhys(c,b,dt){b.v.y-=BBG*dt;b.p.x+=b.v.x*dt;b.p.y+=b.v.y*dt;b.p.z+=b.v.z*dt;b.age+=dt;
+ for(const dir of[-1,1]){const bx=dir*17.5;if(((dir>0&&b.p.x>bx-.1&&b.v.x>0)||(dir<0&&b.p.x<bx+.1&&b.v.x<0))&&b.p.y>3.9&&b.p.y<5.6&&Math.abs(b.p.z)<1.3){b.p.x=bx-dir*.1;b.v.x*=-.45}   // backboard
+  const hx=dir*16.9,dx=b.p.x-hx;if(b.v.y<0&&b.p.y<4.4&&b.p.y>3.4&&dx*dx+b.p.z*b.p.z<.25){b.v.x*=.25;b.v.z*=.25}}                                                          // net slows the ball
+ if(b.p.y<BBR){b.p.y=BBR;if(Math.abs(b.v.y)>1.8)b.v.y*=-.62;else b.v.y=0;b.v.x*=.88;b.v.z*=.88}
+ if(b.p.y<=BBR+.01){b.v.x*=1-Math.min(1,1.2*dt);b.v.z*=1-Math.min(1,1.2*dt)}
+ if(b.p.x>21.4){b.p.x=21.4;b.v.x*=-.5}if(b.p.x<-21.4){b.p.x=-21.4;b.v.x*=-.5}if(b.p.z>13){b.p.z=13;b.v.z*=-.5}if(b.p.z<-13){b.p.z=-13;b.v.z*=-.5}}
+function bbCourt(c,dt,cheer,pl,tm,rnd){
+ const b=c.ball,K=c.kids;for(const k of K){k.ar=k.al=undefined;k.hop=0;k.mvs=0}
+ // ---- ball + possession ----
+ if(b.mode==='held'){const k=b.holder,hx=bbHoop(c,k.team),dir=k.team===0?1:-1;b.t+=dt;b.ph+=dt*12;b.pt-=dt;
+  if(k.st==='shoot'){k.stT-=dt;k.al=k.ar=2.45;k.hop=Math.sin(Math.min(1,(.5-k.stT)/.5)*Math.PI)*.3*2.4*k.hs;bbHand(k,b);b.p.y=1.3*2.4*k.hs;if(k.stT<=0)bbRelease(c,k,rnd)}
+  else{const sx=hx-dir*b.sp,sz=b.sz;if(!cheer){bbMove(k,sx,sz,5,dt);if(Math.hypot(sx-k.x,sz-k.z)<1.2&&b.t>1.3){k.st='shoot';k.stT=.5}
+    else if(b.pt<=0){const mates=K.filter(m=>m.team===k.team&&m!==k);const to=mates[rnd()*mates.length|0];if(to){b.mode='pass';b.from={x:b.p.x,y:b.p.y,z:b.p.z};b.to=to;b.pT=0;b.holder=null;k.st='idle'}}
+    for(const d of K)if(d.team!==k.team&&Math.hypot(d.x-k.x,d.z-k.z)<2&&rnd()<dt*.2){bbPossess(c,d);break}}
+   if(b.mode==='held')bbHand(b.holder,b)}}
+ else if(b.mode==='pass'){b.pT+=dt/.6;const t=b.to,H=2.4*t.hs,f=Math.min(1,b.pT);b.p.x=b.from.x+(t.x-b.from.x)*f;b.p.z=b.from.z+(t.z-b.from.z)*f;b.p.y=b.from.y+(1.1*H-b.from.y)*f+Math.sin(Math.PI*f)*.9;t.al=t.ar=1.6;if(f>=1)bbPossess(c,t)}
+ else{bbBallPhys(c,b,dt);
+  if(b.mode==='shot'&&(b.age>2.4||(b.p.y<=BBR+.02&&b.age>.5)))b.mode='loose';
+  if(b.mode==='loose'){if(!b.chaser){let best=null,bd=1e9;for(const k of K){const d=Math.hypot(k.x-b.p.x,k.z-b.p.z)*(b.made&&k.team===b.last?1.6:1);if(d<bd){bd=d;best=k}}b.chaser=best}
+   const k=b.chaser;if(!cheer)bbMove(k,b.p.x,b.p.z,6.2,dt);if(Math.hypot(k.x-b.p.x,k.z-b.p.z)<1&&b.p.y<1.7)bbPossess(c,k)}}
+ // ---- everyone else ----
+ const h=b.holder,off=h?h.team:(b.last===undefined?0:b.last),tgtHoop=bbHoop(c,off);
+ for(const k of K){if(k===h||k===b.chaser||(b.mode==='pass'&&k===b.to)||k.st==='shoot')continue;
+  if(cheer){k.al=2.55+.5*Math.sin(tm*9+k.sd);k.hop=Math.max(0,Math.sin(tm*6+k.sd))*.3*2.4*k.hs;continue}
+  let tx,tz;
+  if(k.team===off){const dir=off===0?1:-1;tx=tgtHoop-dir*(7+(k.k%4)*2.6)+Math.sin(tm*.6+k.sd)*3;tz=(k.k-1.5)*5+Math.cos(tm*.5+k.sd)*2}
+  else{const o=K.find(q=>q.team===off&&q.k===k.k)||K[0],hd=-tgtHoop;tx=o.x+(tgtHoop-o.x)*.25;tz=o.z*.75;if(h&&Math.hypot(h.x-k.x,h.z-k.z)<6){tx=h.x+(tgtHoop-h.x)*.12;tz=h.z*.9}}
+  bbMove(k,tx,tz,4,dt)}
+ // ---- facing + run cycle ----
+ for(const k of K){let ty;if(cheer)ty=Math.atan2(pl.x-(c.cx+k.x),pl.z-(c.cz+k.z));else if(k.st==='shoot')ty=Math.atan2(bbHoop(c,k.team)-k.x,-k.z);else if(k.mvs>.3)ty=Math.atan2(k.vx,k.vz);else ty=Math.atan2(b.p.x-k.x,b.p.z-k.z);
+  k.ya+=bbWrap(ty-k.ya)*(1-Math.exp(-10*dt));k.ph+=k.mvs*dt*2.2;k.mv=k.mvs>.3?1:0}}
+function bbStep(dt){if(!bbCourts.length||!S)return;const P=S.pos,tm=time;
+ for(const c of bbCourts){const dp=Math.hypot(c.cx-P.x,c.cz-P.z);if(dp>260)continue;
+  const cheer=dp<15&&P.y<6,pl={x:P.x,z:P.z};bbCourt(c,Math.min(dt,.05),cheer,pl,tm,Math.random);
+  for(const k of c.kids){k.wx=c.cx+k.x;k.wz=c.cz+k.z}
+  c.ball.m.position.set(c.cx+c.ball.p.x,c.ball.p.y,c.cz+c.ball.p.z);c.ball.m.rotation.x+=dt*6;c.ball.m.rotation.z+=dt*3}}
+/* ---- build the courts in the empty city blocks nearest the spawn point ---- */
+{const cells=[];for(let i=-7;i<=7;i++)for(let j=-7;j<=7;j++){const cx=i*CELL,cz=j*CELL;let hit=false;for(const h of B){if(h.x1>cx-LOT&&h.x0<cx+LOT&&h.z1>cz-LOT&&h.z0<cz+LOT){hit=true;break}}if(!hit)cells.push({cx,cz,d:Math.hypot(cx-CELL/2,cz-CELL/2)})}
+ cells.sort((a,b)=>a.d-b.d);
+ for(const cell of cells.slice(0,isTouch?1:2)){
+  bbBuild(cell.cx,cell.cz);
+  const ball={m:new THREE.Mesh(new THREE.SphereGeometry(BBR,14,10),new THREE.MeshStandardMaterial({map:BBBALL,roughness:.6})),p:{x:0,y:BBR,z:0},v:{x:0,y:0,z:0},mode:'held',holder:null,t:0,pt:2,sp:8,sz:0,ph:0,last:0,made:false,age:0,chaser:null};ball.m.castShadow=true;scene.add(ball.m);
+  const c={cx:cell.cx,cz:cell.cz,ball,kids:[]};
+  for(let t=0;t<2;t++)for(let q=0;q<4;q++){const x=(t?1:-1)*(3+q*3.6),z=(q-1.5)*4.6,n=mkNpc({kid:1,hs:.58+Math.random()*.08,x:cell.cx+x,z:cell.cz+z,shirt:t?'#2c6e9b':'#c0392b'});
+   Object.assign(n,{team:t,k:q,sd:Math.random()*6,x,z,wx:cell.cx+x,wz:cell.cz+z,ya:t?-Math.PI/2:Math.PI/2,st:'idle',vx:0,vz:0,mvs:0,mv:0,stT:0});c.kids.push(n)}
+  bbPossess(c,c.kids[0]);bbCourts.push(c)}}
+/* ===== end BASKETBALL ===== */
 /* ===== PART 3: street stalls (hot dogs, fruit, coffee, pretzels, ice cream) on the sidewalk against the wall, each with a vendor NPC and a hull so you can't walk through them ===== */
 const STALLS=[],FORCE_STALL=new Set(['0,1,1,0','0,0,0,1','1,0,-1,0']);   // forced: ~30-55 units from the spawn point
 {const TY=[{n:'HOT DOGS',c:'#d62828',u:'#d62828',g:['#555555','#c1440e','#f7d633']},{n:'FRESH FRUIT',c:'#2e8b3a',u:'#2e8b3a',g:['#d62828','#f28c28','#6aa84f']},{n:'COFFEE',c:'#6b4226',u:'#eeeeee',g:['#eeeeee','#6b4226','#d9b38c']},{n:'PRETZELS',c:'#c98a2b',u:'#2b6bc9',g:['#c98a2b','#e0a840','#f0f0f0']},{n:'ICE CREAM',c:'#ff7ab8',u:'#ff7ab8',g:['#ffffff','#ffb6d9','#9be7ff']}];
@@ -644,6 +741,7 @@ function drawRadar(){document.body.classList.toggle('pl',!!S&&state==='play');if
  rg.save();rg.translate(c,c);rg.rotate(th);rg.scale(k,k);rg.translate(-S.pos.x,-S.pos.z);rg.drawImage(MAPC,-HALF,-HALF,2*HALF,2*HALF);
  for(const e of E){if(e.dead||e.boss)continue;if(Math.hypot(e.pos.x-S.pos.x,e.pos.z-S.pos.z)<RV){rg.fillStyle='#ff4040';rg.beginPath();rg.arc(e.pos.x,e.pos.z,3.4,0,6.283);rg.fill()}}
  for(const s of STALLS)if(Math.hypot(s.x-S.pos.x,s.z-S.pos.z)<RV){rg.fillStyle=s.cd>0?'#7a6a4a':'#ffd23f';rg.strokeStyle='#fff';rg.lineWidth=1;rg.beginPath();rg.arc(s.x,s.z,3.6,0,6.283);rg.fill();rg.stroke()}
+ for(const c of bbCourts)if(Math.hypot(c.cx-S.pos.x,c.cz-S.pos.z)<RV+25){rg.fillStyle='#ff8a2a';rg.strokeStyle='#fff';rg.lineWidth=1;rg.fillRect(c.cx-6,c.cz-3.5,12,7);rg.strokeRect(c.cx-6,c.cz-3.5,12,7)}
  const hk=E.find(e=>e.boss&&!e.dead);if(hk){const d=Math.hypot(hk.pos.x-S.pos.x,hk.pos.z-S.pos.z);if(d<RV*.93){const p=1+.25*Math.sin(time*6);rg.fillStyle='#38ff3a';rg.strokeStyle='#fff';rg.lineWidth=1.4;rg.beginPath();rg.arc(hk.pos.x,hk.pos.z,7*p,0,6.283);rg.fill();rg.stroke()}}
  rg.restore();
  if(hk){const dx=hk.pos.x-S.pos.x,dz=hk.pos.z-S.pos.z,d=Math.hypot(dx,dz);if(d>=RV*.93){const rx=dx*ct-dz*st,rz=dx*st+dz*ct,a=Math.atan2(rz,rx),r=c-12*rdp;rg.save();rg.translate(c+Math.cos(a)*r,c+Math.sin(a)*r);rg.rotate(a);rg.fillStyle='#38ff3a';rg.strokeStyle='#fff';rg.lineWidth=1.5*rdp;rg.beginPath();rg.moveTo(8*rdp,0);rg.lineTo(-6*rdp,6*rdp);rg.lineTo(-6*rdp,-6*rdp);rg.closePath();rg.fill();rg.stroke();rg.restore()}}
